@@ -1,0 +1,426 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+<title>動画画像なんでも⁉　パズルゲーム</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@700;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#111; --bg:#fff; --panel:#ffffffee; --line:#e6e6e6;
+    --accent:#ff3e8a; --accent2:#00d9ff; --accent3:#7c3aed;
+    --danger:#ff4d4d; --good:#10b981; --shadow:0 10px 30px rgba(0,0,0,.08); --radius:16px;
+  }
+  *{box-sizing:border-box} html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:"Noto Sans JP",ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial}
+  .wrap{max-width:1100px;margin:0 auto;padding:24px;display:grid;gap:20px}
+  header{display:flex;align-items:flex-end;justify-content:space-between;gap:16px}
+  .title{
+    font-weight:900; letter-spacing:.02em; line-height:1.05;
+    font-size:clamp(26px,5vw,44px);
+    background:linear-gradient(90deg,var(--accent3),var(--accent),var(--accent2));
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+    filter: drop-shadow(0 6px 14px rgba(124,58,237,.18));
+  }
+  .subtitle{margin-top:6px;font-weight:700;opacity:.65}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+  .grid{display:grid;gap:16px;grid-template-columns:1fr 360px}
+  @media (max-width:980px){.grid{grid-template-columns:1fr}}
+  .canvasBox{padding:16px;display:grid;gap:12px;position:relative}
+  .canvasHold{
+    border:1px solid var(--line);border-radius:12px;background:#fff;
+    min-height:240px;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;
+  }
+  canvas{display:block;background:#fff}
+  .hud{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
+       padding:8px 12px;border:1px solid var(--line);border-radius:12px;background:#fff}
+  .hud .pill{display:inline-flex;align-items:center;gap:.5em;padding:.45em .8em;border-radius:999px;border:1px solid var(--line);background:#fff;font-weight:700}
+  .rightPanel{padding:18px}
+  .field{display:grid;gap:12px}
+  .field label{font-weight:700;font-size:14px}
+  .row{display:grid;gap:10px}
+  input[type="file"],select,button,.slider{width:100%;font-weight:700;border-radius:12px;border:1px solid var(--line);padding:10px 12px;background:#fff}
+  .slider{appearance:none;height:40px;display:grid;align-items:center;padding:0 10px}
+  .slider input{appearance:none;width:100%}
+  .slider input::-webkit-slider-runnable-track{height:6px;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:999px}
+  .slider input::-webkit-slider-thumb{appearance:none;width:18px;height:18px;border-radius:50%;background:#fff;border:2px solid var(--accent3);margin-top:-6px;box-shadow:0 0 0 4px rgba(124,58,237,.12)}
+  .button{display:inline-flex;align-items:center;justify-content:center;gap:.6em;border:0;cursor:pointer;padding:12px 14px;border-radius:12px;color:#fff;background:linear-gradient(90deg,var(--accent3),var(--accent));box-shadow:0 10px 20px rgba(255,62,138,.25);transition:transform .06s ease}
+  .button:active{transform:translateY(1px)} .button[disabled]{opacity:.5;cursor:not-allowed;filter:grayscale(20%)}
+  .muted{opacity:.7;font-size:.9em} .center{text-align:center} .hidden{display:none!important}
+  .screen{display:none} .screen.active{display:block}
+  .result{padding:24px;display:grid;gap:16px;place-items:center;text-align:center}
+  .result h2{margin:0;font-size:clamp(22px,3vw,32px);font-weight:900}
+  .stat{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+  .stat .pill{background:#fff;border:1px solid var(--line);border-radius:999px;padding:.5em .9em;font-weight:700}
+
+  /* クリア時の大きいオーバーレイ：画面全体に固定 */
+.clearOverlay{
+  position: fixed;                 /* ← absolute から fixed へ */
+  inset: 0;                        /* 画面全体 */
+  display: none;
+  place-items: center;
+  z-index: 1000;
+  padding: clamp(12px, 4vw, 24px); /* 余白は画面幅に応じて */
+  background: rgba(255,255,255,.96);
+  backdrop-filter: blur(2px);
+  animation: fadeIn .18s ease-out;
+}
+.clearOverlay.show{ display: grid; }
+
+/* 画像は常に画面内に収まる（見切れ防止） */
+.clearOverlay img{
+  max-width: 96vw;     /* 画面幅の96%まで */
+  max-height: 88dvh;   /* アドレスバー対策で d\*vh 使用 */
+  width: auto;
+  height: auto;
+  object-fit: contain; /* アスペクト比保持で収める */
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+}
+
+.clearOverlay .hint{
+  position: absolute; right: 14px; bottom: 10px;
+  font-size: 12px; opacity: .7;
+}
+
+  .clearOverlay.show{display:grid}
+  .clearOverlay img{max-width:96%; max-height:90%; border-radius:12px; box-shadow:var(--shadow)}
+  .clearOverlay .hint{position:absolute;right:14px;bottom:10px;font-size:12px;opacity:.7}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <div class="title">動画画像なんでも⁉　パズルゲーム</div>
+        <div class="subtitle"></div>
+      </div>
+    </header>
+
+    <div class="grid">
+      <!-- 左：キャンバス & HUD -->
+      <section class="card canvasBox">
+        <div class="hud" id="hud">
+          <div class="pill" id="hudDiff">難易度：-</div>
+          <div class="pill" id="hudPieces">ピース：-</div>
+          <div class="pill" id="hudMoves">手数：0</div>
+          <div class="pill" id="hudTime">残り：00:00</div>
+        </div>
+        <div class="canvasHold" id="canvasHold">
+          <canvas id="game"></canvas>
+          <!-- クリア時に大きく表示 -->
+          <div class="clearOverlay" id="clearOverlay" title="クリックで閉じる">
+            <img id="clearImgLarge" alt="完成画像プレビュー">
+            <div class="hint">クリックで閉じる</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 右：UIパネル（画面切り替え） -->
+      <aside class="card rightPanel">
+        <!-- タイトル -->
+        <div class="screen active" id="screenTitle">
+          <div class="field">
+            <div class="row">
+              <label>画像 / 動画をアップロード</label>
+              <input id="file" type="file" accept="image/*,video/*" />
+            </div>
+            <div class="row">
+              <label>難易度</label>
+              <select id="difficulty">
+                <option value="easy">かんたん（3×3 / 180秒）</option>
+                <option value="normal" selected>ふつう（4×4 / 150秒）</option>
+                <option value="hard">むずかしい（5×5 / 120秒）</option>
+                <option value="extreme">げきむず（6×6 / 90秒）</option>
+              </select>
+            </div>
+            <div class="row">
+              <label>BGM 音量</label>
+              <div class="slider"><input id="bgmVol" type="range" min="0" max="1" step="0.01" value="0.7"></div>
+            </div>
+            <div class="row">
+              <label>SE 音量</label>
+              <div class="slider"><input id="seVol" type="range" min="0" max="1" step="0.01" value="0.8"></div>
+            </div>
+            <button class="button" id="startBtn" disabled>読み込みを待っています…</button>
+          </div>
+        </div>
+
+        <!-- プレイ中 -->
+        <div class="screen" id="screenPlay">
+          <div class="field">
+            <div class="row center"><div class="muted">ピース2枚を順にタップ/クリックで入れ替え</div></div>
+            <button class="button" id="giveupBtn" style="background:linear-gradient(90deg,#999,#666)">タイトルへ戻る</button>
+          </div>
+        </div>
+
+        <!-- クリア -->
+        <div class="screen" id="screenClear">
+          <div class="result">
+            <h2 style="color:var(--good)">🎉 完成！</h2>
+            <div class="stat">
+              <div class="pill" id="clearTime">時間：-</div>
+              <div class="pill" id="clearMoves">手数：-</div>
+              <div class="pill" id="clearPieces">ピース：-</div>
+            </div>
+            <button class="button" id="againBtn">もう一回あそぶ</button>
+            <button class="button" id="toTitleBtn" style="background:linear-gradient(90deg,#999,#666)">タイトルへ</button>
+          </div>
+        </div>
+
+        <!-- ゲームオーバー -->
+        <div class="screen" id="screenOver">
+          <div class="result">
+            <h2 style="color:var(--danger)">⏰ タイムアップ！</h2>
+            <div class="stat">
+              <div class="pill" id="overPieces">ピース：-</div>
+              <div class="pill" id="overMoves">手数：-</div>
+            </div>
+            <button class="button" id="retryBtn">もう一度</button>
+            <button class="button" id="toTitleBtn2" style="background:linear-gradient(90deg,#999,#666)">タイトルへ</button>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+<script>
+/* ==================== BGM（mp3の差し替え先） ==================== */
+const BGM_FILES = {
+  title: 'audio/title.mp3',
+  play:  'audio/play.mp3',
+  clear: 'audio/clear.mp3'
+};
+/* =============================================================== */
+
+const DIFFS = {
+  easy:    { label:'かんたん',  n:3, time:180 },
+  normal:  { label:'ふつう',    n:4, time:150 },
+  hard:    { label:'むずかしい',n:5, time:120 },
+  extreme: { label:'げきむず',  n:6, time:90  }
+};
+
+const $ = s=>document.querySelector(s);
+const $screenTitle=$('#screenTitle'), $screenPlay=$('#screenPlay'), $screenClear=$('#screenClear'), $screenOver=$('#screenOver');
+const $file=$('#file'), $diff=$('#difficulty'), $bgmVol=$('#bgmVol'), $seVol=$('#seVol'), $start=$('#startBtn');
+const $giveup=$('#giveupBtn'), $again=$('#againBtn'), $toTitle=$('#toTitleBtn'), $retry=$('#retryBtn'), $toTitle2=$('#toTitleBtn2');
+const $hudDiff=$('#hudDiff'), $hudPieces=$('#hudPieces'), $hudMoves=$('#hudMoves'), $hudTime=$('#hudTime');
+const $clearTime=$('#clearTime'), $clearMoves=$('#clearMoves'), $clearPieces=$('#clearPieces');
+const $overPieces=$('#overPieces'), $overMoves=$('#overMoves');
+const canvas=$('#game'), ctx=canvas.getContext('2d', { willReadFrequently:true });
+const clearOverlay=$('#clearOverlay'), clearImgLarge=$('#clearImgLarge');
+
+const bgm={ title:new Audio(), play:new Audio(), clear:new Audio() };
+for(const k of Object.keys(bgm)){
+  const src=BGM_FILES[k]||''; if(src) bgm[k].src=src;
+  const DEFAULT_LOOP = { title: true, play: true, clear: false }; // ← クリアだけ false
+for (const k of Object.keys(bgm)) {
+  const src = BGM_FILES[k] || '';
+  if (src) bgm[k].src = src;
+  bgm[k].loop = DEFAULT_LOOP[k];     // ← ここがポイント
+  bgm[k].preload = 'auto';
+  bgm[k].volume = parseFloat($bgmVol.value);
+}
+}
+$bgmVol.addEventListener('input',()=>{ const v=parseFloat($bgmVol.value); for(const k of Object.keys(bgm)) bgm[k].volume=v; });
+
+// SE（合成音）
+const audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+let seVolume=parseFloat($seVol.value); $seVol.addEventListener('input',()=>seVolume=parseFloat($seVol.value));
+function playSE(type='click'){ const t=audioCtx.currentTime, o=audioCtx.createOscillator(), g=audioCtx.createGain();
+  o.type=(type==='success')?'triangle':(type==='swap'?'square':'sine');
+  const base=(type==='success')?660:(type==='swap'?320:520);
+  o.frequency.setValueAtTime(base,t);
+  if(type==='success') o.frequency.exponentialRampToValueAtTime(1320,t+0.15);
+  else if(type==='swap') o.frequency.exponentialRampToValueAtTime(220,t+0.08);
+  else o.frequency.exponentialRampToValueAtTime(400,t+0.05);
+  g.gain.value=0.0001; g.gain.exponentialRampToValueAtTime(Math.max(0.001,seVolume),t+0.01); g.gain.exponentialRampToValueAtTime(0.0001,t+0.18);
+  o.connect(g).connect(audioCtx.destination); o.start(t); o.stop(t+0.2);
+}
+
+let state='title', srcType=null; // 'image' | 'video'
+let img=null, vid=null, mediaW=0, mediaH=0, mediaReady=false;
+
+let N=4, timeLeft=0, timerId=null, animId=null;
+let board=[], moves=0, selected=null;
+
+function setScreen(name){
+  state=name; for(const el of[$screenTitle,$screenPlay,$screenClear,$screenOver]) el.classList.remove('active');
+  if(name==='title')$screenTitle.classList.add('active');
+  if(name==='play') $screenPlay.classList.add('active');
+  if(name==='clear')$screenClear.classList.add('active');
+  if(name==='over') $screenOver.classList.add('active');
+}
+function fmtTime(s){const m=Math.floor(s/60).toString().padStart(2,'0');const ss=Math.floor(s%60).toString().padStart(2,'0');return `${m}:${ss}`;}
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+function stopAllBgm(){for(const k of Object.keys(bgm)){try{bgm[k].pause();bgm[k].currentTime=0}catch{}}}
+async function playBgm(name){stopAllBgm();const a=bgm[name];if(!a||!a.src)return;try{await a.play()}catch{}}
+
+function setStartEnabled(ok){
+  $start.disabled=!ok;
+  $start.textContent = ok ? 'スタート' : '読み込みを待っています…';
+}
+
+// メディア読み込み
+$file.addEventListener('change', (e)=>{
+  const f=e.target.files?.[0]; mediaReady=false; setStartEnabled(false); selected=null; board=[];
+  if(!f) return;
+  if(f.type.startsWith('image/')){
+    srcType='image'; img=new Image();
+    img.onload=()=>{ mediaW=img.naturalWidth; mediaH=img.naturalHeight; resizeCanvas(); draw(); mediaReady=true; setStartEnabled(true); };
+    img.src=URL.createObjectURL(f);
+    if(vid){vid.src='';vid.load();vid=null;}
+  }else if(f.type.startsWith('video/')){
+    srcType='video'; vid=document.createElement('video');
+    vid.preload='auto'; vid.muted=true; vid.loop=true; vid.playsInline=true; vid.src=URL.createObjectURL(f);
+    vid.addEventListener('loadedmetadata',()=>{ mediaW=vid.videoWidth; mediaH=vid.videoHeight; resizeCanvas(); draw(); });
+    // 十分にデコード可能になってから開始を許可
+    const ready=()=>{ mediaReady=true; setStartEnabled(true); draw(); };
+    vid.addEventListener('canplay', ready, { once:true });
+    // Safari対策：loadeddataで代替
+    vid.addEventListener('loadeddata', ()=>{ if(!mediaReady) ready(); }, { once:true });
+    if(img){img.src='';img=null;}
+  }else{
+    alert('画像または動画ファイルを選んでください'); e.target.value='';
+  }
+});
+
+$start.addEventListener('click', async ()=>{
+  if(!$file.files[0]){ alert('画像または動画をアップロードしてください'); return; }
+  if(!mediaReady){ alert('メディアの読み込みを待っています'); return; }
+
+  const d=DIFFS[$diff.value]||DIFFS.normal;
+  N=d.n; timeLeft=d.time; moves=0; selected=null;
+  board=Array.from({length:N*N},(_,i)=>i); shuffle(board);
+  if(board.every((p,i)=>p===i)){const a=Math.floor(Math.random()*board.length),b=(a+1)%board.length;[board[a],board[b]]=[board[b],board[a]];}
+
+  $hudDiff.textContent=`難易度：${d.label}`;
+  $hudPieces.textContent=`ピース：${N}×${N}`;
+  $hudMoves.textContent=`手数：0`;
+  $hudTime.textContent=`残り：${fmtTime(timeLeft)}`;
+
+  resizeCanvas();
+
+  if(timerId)clearInterval(timerId);
+  timerId=setInterval(()=>{ if(state!=='play')return; timeLeft--; $hudTime.textContent=`残り：${fmtTime(Math.max(0,timeLeft))}`; if(timeLeft<=0)gameOver(); },1000);
+
+  try{await audioCtx.resume()}catch{}
+  await playBgm('play');
+  if(srcType==='video'&&vid){ try{ await vid.play(); }catch{} }
+
+  setScreen('play'); loop();
+});
+
+// 入力
+canvas.addEventListener('click',(ev)=>{
+  if(state!=='play')return;
+  const rect=canvas.getBoundingClientRect(), sx=canvas.width/rect.width, sy=canvas.height/rect.height;
+  const x=(ev.clientX-rect.left)*sx, y=(ev.clientY-rect.top)*sy;
+  const col=Math.floor(x/(canvas.width/N)), row=Math.floor(y/(canvas.height/N));
+  if(col<0||row<0||col>=N||row>=N) return;
+  const idx=row*N+col;
+  if(selected===null){ selected=idx; playSE('click'); }
+  else if(selected===idx){ selected=null; }
+  else{ const a=selected,b=idx; [board[a],board[b]]=[board[b],board[a]]; moves++; $hudMoves.textContent=`手数：${moves}`; playSE('swap'); selected=null; if(board.every((p,i)=>p===i)) gameClear(); }
+});
+
+// レイアウト（比率保持）
+function resizeCanvas(){
+  const hold=document.getElementById('canvasHold');
+  const holdW=hold.clientWidth, holdH=Math.max(hold.clientHeight,240);
+  let ratio= (mediaW&&mediaH)? (mediaW/mediaH) : (4/3);
+  let drawW=holdW, drawH=drawW/ratio; if(drawH>holdH){ drawH=holdH; drawW=drawH*ratio; }
+  setCanvasSize(drawW,drawH);
+}
+function setCanvasSize(w,h){
+  const dpr=window.devicePixelRatio||1;
+  canvas.width=Math.max(10,Math.round(w*dpr)); canvas.height=Math.max(10,Math.round(h*dpr));
+  canvas.style.width=`${Math.round(w)}px`; canvas.style.height=`${Math.round(h)}px`;
+}
+
+function draw(){
+  const w=canvas.width,h=canvas.height; ctx.clearRect(0,0,w,h); ctx.fillStyle='#fff'; ctx.fillRect(0,0,w,h);
+  if(!mediaW||!mediaH){ return; }
+  const tileW=w/N, tileH=h/N;
+  // プレビュー（ボード未生成時は原寸フィットのみ）
+  if(!board.length){
+    if(srcType==='image'&&img) ctx.drawImage(img,0,0,mediaW,mediaH,0,0,w,h);
+    else if(srcType==='video'&&vid) { try{ ctx.drawImage(vid,0,0,mediaW,mediaH,0,0,w,h);}catch{} }
+    return;
+  }
+  for(let i=0;i<board.length;i++){
+    const piece=board[i], srcRow=Math.floor(piece/N), srcCol=piece%N, dstRow=Math.floor(i/N), dstCol=i%N;
+    const sx=srcCol*(mediaW/N), sy=srcRow*(mediaH/N), sw=(mediaW/N), sh=(mediaH/N);
+    const dx=dstCol*tileW, dy=dstRow*tileH, dw=tileW, dh=tileH;
+    if(srcType==='image'&&img) ctx.drawImage(img,sx,sy,sw,sh,dx,dy,dw,dh);
+    else if(srcType==='video'&&vid) { try{ ctx.drawImage(vid,sx,sy,sw,sh,dx,dy,dw,dh);}catch{} }
+    ctx.strokeStyle='rgba(0,0,0,.08)'; ctx.lineWidth=Math.max(1,Math.round(Math.min(tileW,tileH)*0.02)); ctx.strokeRect(dx+0.5,dy+0.5,dw-1,dh-1);
+  }
+  if(selected!==null){
+    const dstRow=Math.floor(selected/N), dstCol=selected%N, dx=dstCol*tileW, dy=dstRow*tileH;
+    const lw=Math.max(3,Math.round(Math.min(tileW,tileH)*0.06)); ctx.save(); ctx.lineJoin='round';
+    for(let i=0;i<2;i++){ ctx.strokeStyle=(i===1)?'rgba(255,62,138,.6)':'rgba(0,217,255,.8)'; ctx.lineWidth=lw+(i*3); ctx.globalAlpha=0.85-(i*0.35); ctx.strokeRect(dx+lw,dy+lw,tileW-lw*2,tileH-lw*2); }
+    ctx.globalAlpha=1; ctx.strokeStyle='#00d9ff'; ctx.lineWidth=lw; ctx.strokeRect(dx+lw,dy+lw,tileW-lw*2,tileH-lw*2); ctx.restore();
+  }
+}
+function loop(){ if(state==='play'){ draw(); animId=requestAnimationFrame(loop);} else { cancelAnimationFrame(animId);} }
+
+// クリア／オーバー
+async function gameClear(){
+  setScreen('clear');
+  if(timerId)clearInterval(timerId);
+  stopAllBgm(); playSE('success'); await playBgm('clear');
+
+  // 完成画像（大きいオーバーレイへ表示）
+  const off=document.createElement('canvas'); off.width=canvas.width; off.height=canvas.height; const ox=off.getContext('2d');
+  if(srcType==='image'&&img) ox.drawImage(img,0,0,mediaW,mediaH,0,0,off.width,off.height);
+  else if(srcType==='video'&&vid) ox.drawImage(vid,0,0,mediaW,mediaH,0,0,off.width,off.height);
+  clearImgLarge.src=off.toDataURL('image/png');
+  clearOverlay.classList.add('show');
+
+  $clearTime.textContent=`時間：${fmtTime(timeLeft)}`;
+  $clearMoves.textContent=`手数：${moves}`;
+  $clearPieces.textContent=`ピース：${N}×${N}`;
+}
+function gameOver(){
+  setScreen('over'); if(timerId)clearInterval(timerId); stopAllBgm(); playSE('swap');
+  $overPieces.textContent=`ピース：${N}×${N}`; $overMoves.textContent=`手数：${moves}`;
+}
+
+// 画面遷移
+$again?.addEventListener('click',()=>{ setScreen('title'); clearOverlay.classList.remove('show'); });
+$retry?.addEventListener('click',()=>{ setScreen('title'); clearOverlay.classList.remove('show'); });
+$toTitle?.addEventListener('click',()=>{ setScreen('title'); clearOverlay.classList.remove('show'); stopAllBgm(); playBgm('title'); });
+$toTitle2?.addEventListener('click',()=>{ setScreen('title'); clearOverlay.classList.remove('show'); stopAllBgm(); playBgm('title'); });
+$('#giveupBtn')?.addEventListener('click',()=>{ setScreen('title'); clearOverlay.classList.remove('show'); stopAllBgm(); playBgm('title'); });
+
+// クリア画像オーバーレイをクリックで閉じる
+clearOverlay.addEventListener('click', ()=> clearOverlay.classList.remove('show'));
+
+function showClearOverlay(){
+  clearOverlay.classList.add('show');
+  // 背景スクロールを止める
+  document.documentElement.style.overflow = 'hidden';
+  document.body.style.overflow = 'hidden';
+}
+
+function hideClearOverlay(){
+  clearOverlay.classList.remove('show');
+  document.documentElement.style.overflow = '';
+  document.body.style.overflow = '';
+}
+
+// クリックまたは Esc で閉じる
+clearOverlay.addEventListener('click', hideClearOverlay);
+document.addEventListener('keydown', (e)=>{
+  if (e.key === 'Escape' && clearOverlay.classList.contains('show')) hideClearOverlay();
+});
+
+
+// 初期表示
+setStartEnabled(false); setScreen('title'); resizeCanvas(); draw(); playBgm('title');
+window.addEventListener('resize',()=>{ resizeCanvas(); draw(); });
+</script>
+</body>
+</html>
